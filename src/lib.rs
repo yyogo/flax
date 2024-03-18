@@ -197,6 +197,9 @@
 
 extern crate alloc;
 
+#[macro_use]
+mod macros;
+
 /// Structured component storage
 pub mod archetype;
 /// Provides a buffer for holding multiple types simultaneously
@@ -212,20 +215,18 @@ pub mod filter;
 pub mod system;
 mod world;
 
+/// Provides a debug visitor
+// mod cascade;
+mod archetypes;
 pub mod components;
 mod entity_ref;
 mod entry;
 /// Defines the single error type and result alias
 pub mod error;
-/// Traits for fetching multiple component values simultaneously
-pub mod fetch;
-#[macro_use]
-mod macros;
-/// Provides a debug visitor
-// mod cascade;
-mod archetypes;
 /// Subscribe to changes in the world
 pub mod events;
+/// Traits for fetching multiple component values simultaneously
+pub mod fetch;
 /// Formatting utilities
 pub mod format;
 /// Component metadata used for reflection

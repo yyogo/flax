@@ -1,7 +1,8 @@
-use alloc::{sync::Arc, vec::Vec};
+use alloc::{collections::BTreeMap, sync::Arc, vec::Vec};
 
 use crate::{
     archetype::Archetype,
+    component::{dummy, ComponentKey},
     entity::{EntityKind, EntityStore, EntityStoreIter, EntityStoreIterMut},
     events::EventSubscriber,
     metadata::exclusive,
@@ -20,6 +21,7 @@ pub(crate) struct Archetypes {
 
     // These trickle down to the archetypes
     subscribers: Vec<Arc<dyn EventSubscriber>>,
+    pub(crate) index: ArchetypeIndex,
 }
 
 impl Archetypes {
@@ -34,6 +36,7 @@ impl Archetypes {
             gen: 2,
             reserved,
             subscribers: Vec::new(),
+            index: ArchetypeIndex::new(),
         }
     }
 
@@ -64,6 +67,8 @@ impl Archetypes {
         }
 
         let arch = self.inner.despawn(arch_id).unwrap();
+        self.index.unregister(arch_id, &arch);
+
         for (&key, &dst_id) in &arch.incoming {
             let dst = self.get_mut(dst_id);
             dst.remove_link(key);
@@ -95,7 +100,7 @@ impl Archetypes {
                 Some(&id) => id,
                 None => {
                     // Create archetypes as we go and build the tree
-                    let arch_components = cur.components().chain([head]);
+                    let arch_components = cur.components_desc().chain([head]);
 
                     // Ensure exclusive property of the new component are maintained
                     let mut new = if head.is_relation() && head.meta_ref().has(exclusive()) {
@@ -124,6 +129,8 @@ impl Archetypes {
                     let (cur, new) = self.inner.get_disjoint(cursor, new_id).unwrap();
                     cur.add_child(head.key, new_id);
                     new.add_incoming(head.key, cursor);
+
+                    self.index.register(new_id, new);
 
                     new_id
                 }
@@ -159,7 +166,7 @@ impl Archetypes {
     ///
     /// It is the callers responibility to cleanup child nodes if the node is internal
     /// Children are detached from the tree, but still accessible by id
-    pub fn despawn(&mut self, id: Entity) -> Archetype {
+    pub fn despawn(&mut self, id: ArchetypeId) -> Archetype {
         let arch = self.inner.despawn(id).expect("Despawn invalid archetype");
 
         // Remove outgoing edges
@@ -169,6 +176,7 @@ impl Archetypes {
         }
         self.gen = self.gen.wrapping_add(1);
 
+        self.index.unregister(id, &arch);
         arch
     }
 
@@ -187,5 +195,91 @@ impl Archetypes {
 
     pub(crate) fn gen(&self) -> u32 {
         self.gen
+    }
+}
+
+struct ArchetypeRecord {
+    // arch_id: ArchetypeId,
+    cell_index: usize,
+    /// The number of relations for this component.
+    ///
+    /// Since they are ordered sequentially, they start at `cell_index` and continue for `relation_count`
+    relation_count: usize,
+}
+
+type ArchetypeRecords = BTreeMap<ArchetypeId, ArchetypeRecord>;
+pub struct ArchetypeIndex {
+    components: BTreeMap<ComponentKey, ArchetypeRecords>,
+}
+
+impl ArchetypeIndex {
+    pub fn new() -> Self {
+        Self {
+            components: BTreeMap::new(),
+        }
+    }
+
+    fn register_relation(&mut self, arch_id: ArchetypeId, key: ComponentKey, cell_index: usize) {
+        let records = self
+            .components
+            .entry(key)
+            .or_default()
+            .entry(arch_id)
+            .or_insert(ArchetypeRecord {
+                cell_index,
+                relation_count: 0,
+            });
+
+        records.relation_count += 1;
+    }
+
+    fn unregister_relation(&mut self, arch_id: ArchetypeId, key: ComponentKey) {
+        let records = self.components.get_mut(&key).unwrap();
+        let record = records.get_mut(&arch_id).unwrap();
+
+        record.relation_count -= 1;
+        if record.relation_count == 0 {
+            records.remove(&arch_id);
+        }
+    }
+
+    pub fn register(&mut self, arch_id: ArchetypeId, arch: &Archetype) {
+        profile_function!();
+        for (&key, &cell_index) in arch.components() {
+            if key.is_relation() {
+                assert!(key.object.is_some());
+                self.register_relation(arch_id, ComponentKey::new(dummy(), key.object), cell_index);
+                self.register_relation(
+                    arch_id,
+                    ComponentKey::new(key.id(), Some(dummy())),
+                    cell_index,
+                );
+            }
+
+            self.components.entry(key).or_default().insert(
+                arch_id,
+                ArchetypeRecord {
+                    cell_index,
+                    relation_count: 0,
+                },
+            );
+        }
+    }
+
+    pub fn unregister(&mut self, arch_id: ArchetypeId, arch: &Archetype) {
+        profile_function!();
+        for (key, _) in arch.components() {
+            if key.is_relation() {
+                assert!(key.object.is_some());
+                self.unregister_relation(arch_id, ComponentKey::new(dummy(), key.object));
+                self.unregister_relation(arch_id, ComponentKey::new(key.id(), Some(dummy())));
+            }
+
+            let records = self.components.get_mut(key).unwrap();
+            records.remove(&arch_id);
+            if records.is_empty() {
+                self.components.remove(&key);
+            }
+        }
     }
 }

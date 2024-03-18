@@ -160,10 +160,7 @@ impl World {
         let _ = arch.allocate_n(&ids);
 
         for (_, mut storage) in chunk.take_all() {
-            unsafe {
-                arch.extend(&mut storage, change_tick)
-                    .expect("Component not in archetype");
-            }
+            unsafe { arch.extend(&mut storage, change_tick) }
         }
 
         ids
@@ -289,7 +286,7 @@ impl World {
         let change_tick = self.advance_change_tick();
 
         let dst_components: SmallVec<[ComponentDesc; 8]> =
-            src.components().filter(|v| f(v.key())).collect();
+            src.components_desc().filter(|v| f(v.key())).collect();
 
         let (dst_id, _) = self.archetypes.find_create(dst_components);
 
@@ -440,7 +437,7 @@ impl World {
         let change_tick = self.advance_change_tick();
         let archetypes = Query::new(())
             .filter(ArchetypeFilter(|arch: &Archetype| {
-                arch.components()
+                arch.components_desc()
                     .any(|v| v.key().id == id || v.key().object == Some(id))
             }))
             .borrow(self)
@@ -450,7 +447,7 @@ impl World {
         for src in archetypes.into_iter().rev() {
             let mut src = self.archetypes.despawn(src);
 
-            let components = src.components().filter(|v| {
+            let components = src.components_desc().filter(|v| {
                 let key = v.key();
                 !(key.id == id || key.object == Some(id))
             });
@@ -593,7 +590,7 @@ impl World {
             Some(dst) => dst,
             None => {
                 let components = src
-                    .components()
+                    .components_desc()
                     .filter(|v| v.key != desc.key())
                     .collect_vec();
 
@@ -881,10 +878,7 @@ impl World {
         let arch = self.archetypes.get_mut(arch_id);
 
         for (_, mut storage) in chunk.take_all() {
-            unsafe {
-                arch.extend(&mut storage, change_tick)
-                    .expect("Component not in archetype");
-            }
+            unsafe { arch.extend(&mut storage, change_tick) }
         }
 
         Ok(ids)
@@ -1164,7 +1158,7 @@ impl World {
             if !arch.has(is_static().key()) {
                 let mut batch = BatchSpawn::new(arch.len());
                 let arch = arch.drain();
-                for mut cell in arch.cells.into_values() {
+                for mut cell in arch.cells.into_vec().into_iter() {
                     let mut storage = cell.drain();
                     let mut id = storage.desc().key;
 

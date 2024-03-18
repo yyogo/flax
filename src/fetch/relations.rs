@@ -33,7 +33,9 @@ where
         let borrows: SmallVec<[_; 4]> = {
             data.arch
                 .relations_like(self.component.id())
-                .map(|(desc, cell)| (desc.object.unwrap(), cell.borrow()))
+                .map(|(desc, &cell_index)| {
+                    (desc.object.unwrap(), data.arch.cells()[cell_index].borrow())
+                })
                 .collect()
         };
 
@@ -46,7 +48,7 @@ where
 
     fn access(&self, data: FetchAccessData, dst: &mut Vec<Access>) {
         let relation = self.component.key().id;
-        dst.extend(data.arch.cells().keys().filter_map(move |k| {
+        dst.extend(data.arch.components().keys().filter_map(move |k| {
             if k.object.is_some() && k.id == relation {
                 return Some(Access {
                     kind: AccessKind::Archetype {

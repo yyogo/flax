@@ -324,8 +324,8 @@ impl<'w> Fetch<'w> for WithObject {
     }
 
     fn filter_arch(&self, arch: &Archetype) -> bool {
-        arch.components().any(|v| {
-            if let Some(v) = v.key().object {
+        arch.components().keys().any(|v| {
+            if let Some(v) = v.object {
                 if v == self.object {
                     return true;
                 }

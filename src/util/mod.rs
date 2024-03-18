@@ -62,25 +62,6 @@ tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H }
 tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H, 7 => I }
 tuple_impl! { 0 => A, 1 => B, 2 => C, 3 => D, 4 => E, 5 => F, 6 => H, 7 => I, 8 => J }
 
-#[cfg(test)]
-mod test {
-
-    use super::TupleCombine;
-
-    #[test]
-    fn tuples_push() {
-        let a: i32 = 5;
-        let b = "foo";
-
-        let tuple = (a, b);
-
-        let cloned: (i32, &str, i64) = tuple.push_right(a as i64);
-        assert_eq!(cloned, (a, b, a as i64));
-        let t = ().push_right(5);
-        assert_eq!(t, (5,));
-    }
-}
-
 impl<T> TupleCombine<T> for All {
     type PushRight = (All, T);
 
@@ -138,6 +119,9 @@ impl<'a, T> Ptr<'a, T> {
 unsafe impl<T: Sync> Sync for Ptr<'_, T> {}
 unsafe impl<T: Send> Send for Ptr<'_, T> {}
 
+unsafe impl<T: Sync> Sync for PtrMut<'_, T> {}
+unsafe impl<T: Send> Send for PtrMut<'_, T> {}
+
 #[doc(hidden)]
 /// A lifetime annotated invariant mutable pointer
 pub struct PtrMut<'a, T> {
@@ -178,5 +162,21 @@ impl<'a, T> PtrMut<'a, T> {
     }
 }
 
-unsafe impl<T: Sync> Sync for PtrMut<'_, T> {}
-unsafe impl<T: Send> Send for PtrMut<'_, T> {}
+#[cfg(test)]
+mod test {
+
+    use super::TupleCombine;
+
+    #[test]
+    fn tuples_push() {
+        let a: i32 = 5;
+        let b = "foo";
+
+        let tuple = (a, b);
+
+        let cloned: (i32, &str, i64) = tuple.push_right(a as i64);
+        assert_eq!(cloned, (a, b, a as i64));
+        let t = ().push_right(5);
+        assert_eq!(t, (5,));
+    }
+}
